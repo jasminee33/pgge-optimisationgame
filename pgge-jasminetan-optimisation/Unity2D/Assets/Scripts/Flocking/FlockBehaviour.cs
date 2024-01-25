@@ -5,19 +5,16 @@ using UnityEngine.EventSystems;
 
 public class FlockBehaviour : MonoBehaviour
 {
-    List<Obstacle> mObstacles = new List<Obstacle>();
-
-    [SerializeField]
-    GameObject[] Obstacles;
 
     [SerializeField]
     BoxCollider2D Bounds;
+    
 
     public float TickDuration = 1.0f;
     public float TickDurationSeparationEnemy = 0.1f;
     public float TickDurationRandom = 1.0f;
 
-    public int BoidIncr = 100;
+    public int BoidIncr = 1000;
     public bool useFlocking = false;
     public int BatchSize = 100;
 
@@ -32,18 +29,6 @@ public class FlockBehaviour : MonoBehaviour
 
     void Start()
     {
-        // Randomize obstacles placement.
-        for (int i = 0; i < Obstacles.Length; ++i)
-        {
-            float x = Random.Range(Bounds.bounds.min.x, Bounds.bounds.max.x);
-            float y = Random.Range(Bounds.bounds.min.y, Bounds.bounds.max.y);
-            Obstacles[i].transform.position = new Vector3(x, y, 0.0f);
-            Obstacle obs = Obstacles[i].AddComponent<Obstacle>();
-            Autonomous autono = Obstacles[i].AddComponent<Autonomous>();
-            autono.MaxSpeed = 1.0f;
-            obs.mCollider = Obstacles[i].GetComponent<CircleCollider2D>();
-            mObstacles.Add(obs);
-        }
 
         foreach (Flock flock in flocks)
         {
@@ -52,9 +37,6 @@ public class FlockBehaviour : MonoBehaviour
 
         StartCoroutine(Coroutine_Flocking());
         StartCoroutine(Coroutine_Random());
-        StartCoroutine(Coroutine_AvoidObstacles());
-        StartCoroutine(Coroutine_SeparationWithEnemies());
-        StartCoroutine(Coroutine_Random_Motion_Obstacles());
     }
 
     void CreateFlock(Flock flock)
@@ -72,7 +54,7 @@ public class FlockBehaviour : MonoBehaviour
     {
         HandleInputs();
         Rule_CrossBorder();
-        Rule_CrossBorder_Obstacles();
+        
     }
 
     void HandleInputs()
@@ -123,8 +105,8 @@ public class FlockBehaviour : MonoBehaviour
         Vector3 separationDir = Vector3.zero;
         Vector3 cohesionDir = Vector3.zero;
 
-        float speed = 0.0f;
-        float separationSpeed = 0.0f;
+        float speed = 3.0f;
+        float separationSpeed = 2.0f;
 
         int count = 0;
         int separationCount = 0;
@@ -210,134 +192,7 @@ public class FlockBehaviour : MonoBehaviour
     }
 
 
-
-    void SeparationWithEnemies_Internal(
-      List<Autonomous> boids,
-      List<Autonomous> enemies,
-      float sepDist,
-      float sepWeight)
-    {
-        for (int i = 0; i < boids.Count; ++i)
-        {
-            for (int j = 0; j < enemies.Count; ++j)
-            {
-                float dist = (
-                  enemies[j].transform.position -
-                  boids[i].transform.position).magnitude;
-                if (dist < sepDist)
-                {
-                    Vector3 targetDirection = (
-                      boids[i].transform.position -
-                      enemies[j].transform.position).normalized;
-
-                    boids[i].TargetDirection += targetDirection;
-                    boids[i].TargetDirection.Normalize();
-
-                    boids[i].TargetSpeed += dist * sepWeight;
-                    boids[i].TargetSpeed /= 2.0f;
-                }
-            }
-        }
-    }
-
-    //<-- removed unneccessary nested loops to make the coroutine faster  -->
-    IEnumerator Coroutine_SeparationWithEnemies()
-    {
-        WaitForSeconds wait = new WaitForSeconds(0.1f); 
-
-        while (true)
-        {
-            foreach (Flock flock in flocks)
-            {
-                if (!flock.useFleeOnSightEnemyRule || flock.isPredator)  //check if current flock is not using FleeOnSightEnemyRule or is a predator
-                    continue; //used continue statement;continue to go through the loops
-
-                foreach (Flock enemies in flocks) //goes through each flock in list
-                {
-                    if (!enemies.isPredator) //if the enemy is not predator 
-                        continue;//continue rest of the code
-                    //if continue is not used, this function is called;to control the separation btween flock and enemy
-                    SeparationWithEnemies_Internal(flock.mAutonomous, enemies.mAutonomous, flock.enemySeparationDistance, flock.weightFleeOnSightEnemy);
-                }
-            }
-
-            yield return wait;
-        }
-    }
-
-    //<-- removed unneccessary nested loops to make the coroutine faster  -->
-    IEnumerator Coroutine_AvoidObstacles()
-    {
-        WaitForSeconds wait = new WaitForSeconds(0.1f); 
-
-        while (true)
-        {
-            foreach (Flock flock in flocks)
-            {
-                //create a conditional statement; checks if the rule is false, if false then the loops will start
-                //continue statement ref: https://www.geeksforgeeks.org/c-sharp-continue-statement/
-                if (!flock.useAvoidObstaclesRule)
-                    continue;
-
-                List<Autonomous> autonomousList = flock.mAutonomous;
-
-                foreach (Autonomous autonomous in autonomousList) //loops through each autonomous in the list
-                {
-                    foreach (Obstacle obstacle in mObstacles) //loops throuch each obstacles
-                    {
-                        //calculate dist between current obstacle and autonomous using position - magnituate of vector 
-                        float dist = (obstacle.transform.position - autonomous.transform.position).magnitude;
-
-                        //checks if the dist is less than the avoidance radius; the autonomous is within radius and must avoid
-                        if (dist < obstacle.AvoidanceRadius)
-                        {
-                            //calculate target direction that is away from the obstacle
-                            Vector3 targetDirection = (autonomous.transform.position - obstacle.transform.position).normalized;
-
-                            //updates the direction by adding the direction wanted multiplied bu the avoidance weight;make the autonomous go to direction to avoid
-                            autonomous.TargetDirection += targetDirection * flock.weightAvoidObstacles;
-
-                            //normalize target direction
-                            autonomous.TargetDirection.Normalize();
-                        }
-                    }
-                }
-            }
-
-            yield return wait;
-        }
-    }
-
-    //<-- removed unneccessary nested loops to make the coroutine faster  -->
-    IEnumerator Coroutine_Random_Motion_Obstacles()
-    {
-        WaitForSeconds wait = new WaitForSeconds(2.0f);
-
-        while (true)
-        {
-            for (int i = 0; i < Obstacles.Length; ++i)
-            {
-                Autonomous autono = Obstacles[i].GetComponent<Autonomous>();
-
-                float rand = Random.Range(0.0f, 1.0f);
-                autono.TargetDirection.Normalize();
-                float angle = Mathf.Atan2(autono.TargetDirection.y, autono.TargetDirection.x);
-
-                angle += (rand > 0.5f) ? Mathf.Deg2Rad * 45.0f : -Mathf.Deg2Rad * 45.0f; //adjust the angle from the random value
-                                                                                         //if its greater then 0.5, adds 45 deg else subtracts
-
-                Vector3 dir = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle));
-                autono.TargetDirection += dir * 0.1f;
-                autono.TargetDirection.Normalize();
-
-                float speed = Random.Range(1.0f, autono.MaxSpeed);
-                autono.TargetSpeed += speed;
-                autono.TargetSpeed /= 2.0f;
-            }
-
-            yield return wait;
-        }
-    }
+    
 
     //<-- removed unneccessary nested loops to make the coroutine faster  -->
     IEnumerator Coroutine_Random()
@@ -376,54 +231,7 @@ public class FlockBehaviour : MonoBehaviour
         }
     }
 
-    void Rule_CrossBorder_Obstacles()
-    {
-        for (int i = 0; i < Obstacles.Length; ++i)
-        {
-            Autonomous autono = Obstacles[i].GetComponent<Autonomous>();
-            Vector3 pos = autono.transform.position;
-            if (autono.transform.position.x > Bounds.bounds.max.x)
-            {
-                pos.x = Bounds.bounds.min.x;
-            }
-            if (autono.transform.position.x < Bounds.bounds.min.x)
-            {
-                pos.x = Bounds.bounds.max.x;
-            }
-            if (autono.transform.position.y > Bounds.bounds.max.y)
-            {
-                pos.y = Bounds.bounds.min.y;
-            }
-            if (autono.transform.position.y < Bounds.bounds.min.y)
-            {
-                pos.y = Bounds.bounds.max.y;
-            }
-            autono.transform.position = pos;
-        }
-
-        for (int i = 0; i < Obstacles.Length; ++i)
-        {
-            Autonomous autono = Obstacles[i].GetComponent<Autonomous>();
-            Vector3 pos = autono.transform.position;
-            if (autono.transform.position.x + 5.0f > Bounds.bounds.max.x)
-            {
-                autono.TargetDirection.x = -1.0f;
-            }
-            if (autono.transform.position.x - 5.0f < Bounds.bounds.min.x)
-            {
-                autono.TargetDirection.x = 1.0f;
-            }
-            if (autono.transform.position.y + 5.0f > Bounds.bounds.max.y)
-            {
-                autono.TargetDirection.y = -1.0f;
-            }
-            if (autono.transform.position.y - 5.0f < Bounds.bounds.min.y)
-            {
-                autono.TargetDirection.y = 1.0f;
-            }
-            autono.TargetDirection.Normalize();
-        }
-    }
+    
 
 
     //<--amended the Rule_CrossBorder() -->
